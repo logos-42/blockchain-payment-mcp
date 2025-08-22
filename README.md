@@ -39,7 +39,7 @@ MAX_TRANSACTION_VALUE=10
 DEBUG=false
 ```
 
-### 3. 配置MCP客户端
+### 3. 本地下载代码-配置MCP客户端
 
 在Cursor的`mcp.json`中添加：
 
