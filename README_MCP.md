@@ -2,7 +2,20 @@
 
 ## 概述
 
-这个项目提供了一个完整的区块链支付MCP（Model Context Protocol）服务器，支持多种区块链网络和代币操作。
+基于Base网络的区块链支付MCP（Model Context Protocol）服务器，提供完整的区块链支付功能。
+
+## 🌟 功能特性
+
+- **多网络支持**: 支持多个测试网和主网，包括Base Sepolia、Base Mainnet、Ethereum Sepolia、Ethereum Mainnet等
+- **代币支持**: ETH、USDC、USDT、DAI、WETH等主流代币
+- **余额查询**: 查询任意地址的ETH和代币余额
+- **安全转账**: 支持ETH和ERC20代币转账
+- **交易追踪**: 实时查询交易状态和确认数
+- **Gas估算**: 智能估算交易Gas费用
+- **钱包管理**: 创建新钱包、验证地址格式
+- **安全限制**: 内置交易金额限制和安全检查
+
+## 🚀 快速开始
 
 ## 安装和配置
 
