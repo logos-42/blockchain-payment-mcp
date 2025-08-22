@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "blockchain-payment": {
+      "command": "blockchain-payment-mcp",
+      "args": [],
+      "env": {
+        "PRIVATE_KEY": "api",
+        "DEFAULT_NETWORK": "base_sepolia",
+        "DEBUG": "true",
+        "MAX_TRANSACTION_VALUE": "10",
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
