@@ -204,13 +204,6 @@ DEBUG=false
 - **浏览器**: https://snowtrace.io
 - **原生代币**: AVAX
 
-## 🪙 支持的代币
-
-### Base Sepolia测试网代币
-- **USDC**: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
-- **USDT**: 0x97853463e157d7E9251622826473446433945950
-- **DAI**: 0x7683022d84F726C432F2bF39dEB9E768c0FeE63b
-- **WETH**: 0x4200000000000000000000000000000000000006
 
 ## 🔒 安全特性
 
@@ -293,33 +286,9 @@ blockmcp/
 └── README.md             # 说明文档
 ```
 
-### 添加新网络
 
-在`config.py`中添加新的网络配置：
 
-```python
-"new_network": NetworkConfig(
-    name="New Network",
-    chain_id=12345,
-    rpc_url="https://rpc.new-network.org",
-    native_token="ETH",
-    explorer_url="https://explorer.new-network.org",
-    gas_price=20000000000
-)
-```
 
-### 添加新代币
-
-在`config.py`中添加新的代币配置：
-
-```python
-"NEW_TOKEN": TokenConfig(
-    symbol="NEW",
-    address="0x...",
-    decimals=18,
-    name="New Token"
-)
-```
 
 ## 🧪 测试链支持
 
