@@ -4,7 +4,7 @@
             "command": "python",
             "args": ["-m", "blockchain_payment_mcp.server"],
             "env": {
-                "PRIVATE_KEY": "1655aad5f3b8e80ac2bd4383d3ac8bbab3ec928645c7342e568b394193efdf2c",
+                "PRIVATE_KEY": "",
                 "DEFAULT_NETWORK": "base_sepolia",
                 "DEBUG": "false",
                 "MAX_TRANSACTION_VALUE": "10"
