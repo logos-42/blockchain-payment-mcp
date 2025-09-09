@@ -821,6 +821,68 @@ async def network_info_prompt(
 请确保信息实时准确，并提供有用的操作建议。"""
 
 @server.get_prompt()
+async def wallet_balance_workflow_prompt(
+    private_key: str = "",
+    network: str = "base_sepolia"
+) -> str:
+    """
+    钱包余额查询工作流prompt - 从私钥读取地址并查询余额
+    
+    Args:
+        private_key: 要查询的钱包私钥
+        network: 网络名称
+    """
+    
+    return f"""你是一个专业的区块链钱包管理助手。现在需要执行一个钱包余额查询工作流，从私钥获取地址并查询所有代币余额。
+
+## 工作流任务：钱包余额查询
+
+### 当前参数：
+- 网络: {network}
+- 私钥: {'已提供' if private_key else '未提供'}
+
+### 执行步骤：
+
+1. **验证私钥并获取地址**
+   - 使用 get_wallet_address 工具从私钥获取钱包地址
+   - 验证地址格式是否正确
+   - 显示地址信息（私钥部分用*号隐藏）
+
+2. **查询ETH余额**
+   - 使用 get_balance 工具查询该地址的ETH余额
+   - 显示ETH余额和对应的美元价值（如果可用）
+
+3. **查询代币余额**
+   - 使用 get_supported_tokens 工具获取支持的代币列表
+   - 对每个支持的代币使用 get_balance 工具查询余额
+   - 只显示有余额的代币
+
+4. **汇总余额信息**
+   - 整理所有有余额的代币
+   - 计算总价值（如果可能）
+   - 提供清晰的余额报告
+
+### 安全注意事项：
+- 确保私钥安全，不要在日志中完整显示
+- 只显示必要的地址信息
+- 保护用户隐私
+
+### 输出格式：
+- 钱包地址: 0x...
+- ETH余额: X.XXXX ETH
+- 代币余额:
+  - USDC: X.XX USDC
+  - DAI: X.XX DAI
+  - 其他代币...
+
+### 错误处理：
+- 如果私钥格式错误，提示用户检查
+- 如果网络连接失败，建议重试
+- 如果查询失败，分析原因并提供解决方案
+
+请按照这个工作流执行钱包余额查询任务，提供准确详细的余额信息。"""
+
+@server.get_prompt()
 async def security_prompt(
     operation_type: str = "general"
 ) -> str:
