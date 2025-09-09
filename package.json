@@ -14,11 +14,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/logos-42/blockchain-payment-mcp-ts.git"
+    "url": "git+https://github.com/logos-42/blockchain-payment-mcp.git"
   },
-  "homepage": "https://github.com/logos-42/blockchain-payment-mcp-ts#readme",
+  "homepage": "https://github.com/logos-42/blockchain-payment-mcp#readme",
   "bugs": {
-    "url": "https://github.com/logos-42/blockchain-payment-mcp-ts/issues"
+    "url": "https://github.com/logos-42/blockchain-payment-mcp/issues"
   },
   "scripts": {
     "build": "tsc",
