@@ -11,6 +11,9 @@
 
 import asyncio
 import logging
+import os
+import json
+from pathlib import Path
 from typing import Optional, Union, Dict, Any, List
 from decimal import Decimal
 
@@ -95,6 +98,36 @@ class WalletManager:
 
 # 全局钱包管理器实例
 wallet_manager = WalletManager()
+
+def load_env_from_mcp_config():
+    """从MCP配置文件加载环境变量"""
+    config_paths = [
+        "mcp.json",
+        str(Path(__file__).parent.parent / "mcp.json"),
+        "C:/Users/Mechrevo/.cursor/mcp.json"
+    ]
+    
+    for config_path in config_paths:
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    mcp_config = json.load(f)
+                    
+                # 查找blockchain-payment服务器配置
+                if "mcpServers" in mcp_config:
+                    for server_name, server_config in mcp_config["mcpServers"].items():
+                        if "blockchain-payment" in server_name and "env" in server_config:
+                            # 设置环境变量
+                            for key, value in server_config["env"].items():
+                                os.environ[key] = str(value)
+                            
+                            logger.info(f"从MCP配置文件加载环境变量: {config_path}")
+                            return True
+            except Exception as e:
+                logger.warning(f"读取MCP配置文件失败 {config_path}: {e}")
+    
+    logger.warning("未找到有效的MCP配置文件")
+    return False
 
 def get_blockchain(network_id: Optional[str] = None) -> BlockchainInterface:
     """获取区块链接口实例"""
@@ -355,7 +388,21 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["label"]
             }
-        )
+        ),
+        Tool(
+            name="get_wallet_address",
+            description="从私钥获取钱包地址",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "private_key": {
+                        "type": "string",
+                        "description": "钱包私钥"
+                    }
+                },
+                "required": ["private_key"]
+            }
+        ),
     ]
 
 @server.call_tool()
@@ -386,6 +433,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = await handle_switch_wallet(arguments)
         elif name == "remove_wallet":
             result = await handle_remove_wallet(arguments)
+        elif name == "get_wallet_address":
+            result = await handle_get_wallet_address(arguments)
         else:
             result = {"error": f"未知工具: {name}"}
         
@@ -617,8 +666,230 @@ async def handle_remove_wallet(args: dict) -> dict:
             "error": f"未找到标签为 '{label}' 的钱包"
         }
 
+async def handle_get_wallet_address(args: dict) -> dict:
+    """处理从私钥获取钱包地址"""
+    private_key = args["private_key"]
+    
+    # 验证私钥格式
+    if not WalletSigner.validate_private_key(private_key):
+        return {
+            "success": False,
+            "error": "无效的私钥格式"
+        }
+    
+    try:
+        wallet = WalletSigner(private_key)
+        return {
+            "success": True,
+            "address": wallet.address,
+            "private_key_masked": private_key[:10] + "..." + private_key[-10:],  # 部分显示私钥
+            "message": "成功从私钥获取钱包地址"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"获取地址失败: {str(e)}"
+        }
+
+# ==================== 官方标准Prompt实现 ====================
+
+@server.get_prompt()
+async def balance_query_prompt(
+    address: str,
+    network: str = "base_sepolia", 
+    token_symbol: str = "ETH"
+) -> str:
+    """
+    为区块链余额查询生成专业的助手prompt
+    
+    Args:
+        address: 要查询的钱包地址
+        network: 区块链网络名称
+        token_symbol: 代币符号
+    """
+    return f"""你是一个专业的区块链支付助手。请帮助用户查询钱包余额。
+
+用户信息：
+- 钱包地址: {address}
+- 网络: {network}
+- 代币类型: {token_symbol}
+
+请按以下格式提供帮助：
+1. 显示钱包地址和网络信息
+2. 查询并显示余额（ETH和代币）
+3. 提供相关操作建议
+4. 确保信息准确且用户友好
+
+请使用专业的区块链术语，但保持解释清晰易懂。"""
+
+@server.get_prompt()
+async def transaction_send_prompt(
+    from_address: str,
+    to_address: str,
+    amount: str,
+    token_symbol: str = "ETH",
+    network: str = "base_sepolia"
+) -> str:
+    """
+    为区块链交易发送生成专业的助手prompt
+    
+    Args:
+        from_address: 发送方地址
+        to_address: 接收方地址
+        amount: 转账金额
+        token_symbol: 代币符号
+        network: 区块链网络
+    """
+    return f"""你是一个专业的区块链支付助手。请帮助用户发送代币转账。
+
+交易信息：
+- 发送方: {from_address}
+- 接收方: {to_address}
+- 金额: {amount} {token_symbol}
+- 网络: {network}
+
+请按以下步骤安全地执行转账：
+1. 验证地址格式和有效性
+2. 检查发送方余额是否充足
+3. 估算Gas费用
+4. 向用户确认交易详情
+5. 执行转账并监控状态
+
+请确保每一步都经过用户确认，并提供清晰的状态反馈。"""
+
+@server.get_prompt()
+async def wallet_management_prompt(
+    wallet_count: int = 0,
+    current_wallet: str = "未设置"
+) -> str:
+    """
+    为钱包管理生成专业的助手prompt
+    
+    Args:
+        wallet_count: 当前钱包数量
+        current_wallet: 当前使用的钱包标签
+    """
+    return f"""你是一个专业的钱包管理助手。请帮助用户管理多个区块链钱包。
+
+当前钱包状态：
+- 钱包数量: {wallet_count}
+- 当前钱包: {current_wallet}
+
+请提供以下安全功能：
+1. 创建新钱包（生成地址和私钥）
+2. 切换当前使用的钱包
+3. 查看所有钱包列表
+4. 安全删除钱包
+5. 导入现有私钥
+
+请确保所有操作都经过用户确认，并强调私钥安全的重要性。"""
+
+@server.get_prompt()
+async def network_info_prompt(
+    network: str = "base_sepolia",
+    chain_id: str = "84532",
+    rpc_url: str = "https://base-sepolia-rpc.publicnode.com",
+    explorer_url: str = "https://sepolia.basescan.org",
+    native_token: str = "ETH"
+) -> str:
+    """
+    为区块链网络信息生成专业的助手prompt
+    
+    Args:
+        network: 网络名称
+        chain_id: 链ID
+        rpc_url: RPC节点地址
+        explorer_url: 区块链浏览器地址
+        native_token: 原生代币符号
+    """
+    return f"""你是一个专业的区块链网络信息助手。请提供详细的网络相关信息。
+
+网络配置：
+- 当前网络: {network}
+- 链ID: {chain_id}
+- RPC地址: {rpc_url}
+- 浏览器: {explorer_url}
+- 原生代币: {native_token}
+
+请提供以下信息：
+1. 网络连接状态和最新区块信息
+2. 当前Gas价格和网络拥堵情况
+3. 支持的代币列表和合约地址
+4. 网络切换建议和注意事项
+5. 相关工具和资源链接
+
+请确保信息实时准确，并提供有用的操作建议。"""
+
+@server.get_prompt()
+async def security_prompt(
+    operation_type: str = "general"
+) -> str:
+    """
+    为区块链安全操作生成专业的助手prompt
+    
+    Args:
+        operation_type: 操作类型 (general, transaction, wallet, key_management)
+    """
+    security_guidelines = {
+        "general": """
+通用区块链安全指南：
+- 永远不要分享私钥或助记词
+- 使用硬件钱包存储大额资金
+- 验证所有地址和合约
+- 定期备份钱包
+- 使用官方或可信的RPC节点""",
+        
+        "transaction": """
+交易安全指南：
+- 仔细验证接收地址
+- 确认交易金额和代币类型
+- 检查Gas费用设置
+- 使用测试网进行测试
+- 监控交易状态""",
+        
+        "wallet": """
+钱包安全指南：
+- 使用强密码保护钱包
+- 定期更新钱包软件
+- 避免在不安全的网络环境下操作
+- 使用多重签名钱包
+- 分散存储资金""",
+        
+        "key_management": """
+密钥管理安全指南：
+- 私钥离线存储
+- 使用助记词备份
+- 避免截屏或拍照保存
+- 定期更换密钥
+- 使用密钥管理工具"""
+    }
+    
+    return f"""你是一个专业的区块链安全助手。请为用户提供安全操作指导。
+
+操作类型: {operation_type}
+
+{security_guidelines.get(operation_type, security_guidelines['general'])}
+
+请始终强调安全第一的原则，并在每次操作前提醒用户检查安全事项。"""
+
+
 async def main():
     """主函数"""
+    # 首先尝试从MCP配置文件加载环境变量
+    load_env_from_mcp_config()
+    
+    # 重新导入配置模块以获取最新环境变量
+    import importlib
+    import sys
+    
+    # 如果配置模块已经导入，重新加载它
+    if 'blockchain_payment_mcp.config' in sys.modules:
+        config_module = sys.modules['blockchain_payment_mcp.config']
+        importlib.reload(config_module)
+    
+    # 重新导入配置
+    from blockchain_payment_mcp.config import config
+    
     # 设置更简洁的日志格式，避免干扰stdio通信
     if config.debug:
         logger.info(f"启动区块链支付MCP服务器")
@@ -645,5 +916,9 @@ async def main():
             server.create_initialization_options()
         )
 
-if __name__ == "__main__":
+def cli_main():
+    """CLI入口点 - 同步函数"""
     asyncio.run(main())
+
+if __name__ == "__main__":
+    cli_main()

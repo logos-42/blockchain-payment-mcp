@@ -24,6 +24,13 @@ class TokenConfig:
     decimals: int
     name: str
 
+@dataclass
+class PromptConfig:
+    """Prompt配置"""
+    template_type: str
+    variables: Dict[str, str]
+    custom_template: Optional[str] = None
+
 class Config:
     """主配置类"""
     
@@ -200,6 +207,26 @@ class Config:
         
         # 默认网络
         self.default_network = os.getenv("DEFAULT_NETWORK", "ethereum_mainnet")
+        
+        # Prompt配置
+        self.prompt_templates = {
+            "balance_query": {
+                "description": "余额查询prompt模板",
+                "default_variables": ["address", "network", "token_symbol"]
+            },
+            "transaction_send": {
+                "description": "交易发送prompt模板", 
+                "default_variables": ["from_address", "to_address", "amount", "token_symbol", "network"]
+            },
+            "wallet_management": {
+                "description": "钱包管理prompt模板",
+                "default_variables": ["wallet_count", "current_wallet"]
+            },
+            "network_info": {
+                "description": "网络信息prompt模板",
+                "default_variables": ["network", "chain_id", "rpc_url", "explorer_url", "native_token"]
+            }
+        }
     
     def get_network(self, network_id: Optional[str] = None) -> NetworkConfig:
         """获取网络配置"""
@@ -225,6 +252,14 @@ class Config:
     def get_supported_tokens(self) -> list:
         """获取支持的代币列表"""
         return list(self.tokens.keys())
+    
+    def get_prompt_template(self, template_type: str) -> Optional[Dict]:
+        """获取prompt模板配置"""
+        return self.prompt_templates.get(template_type)
+    
+    def get_available_prompt_templates(self) -> list:
+        """获取可用的prompt模板列表"""
+        return list(self.prompt_templates.keys())
 
 # 全局配置实例
 config = Config()

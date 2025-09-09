@@ -1,2 +1,2 @@
 [console_scripts]
-blockchain-payment-mcp = blockchain_payment_mcp.server:main
+blockchain-payment-mcp = blockchain_payment_mcp.server:cli_main

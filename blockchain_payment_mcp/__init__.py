@@ -5,7 +5,7 @@
 支持多种网络和代币类型
 """
 
-__version__ = "0.1.4"
+__version__ = "0.1.10"
 
 # 导出主要功能函数，方便用户直接从包导入使用
 from .server import (
@@ -20,7 +20,14 @@ from .server import (
     handle_set_user_wallet,
     handle_list_wallets,
     handle_switch_wallet,
-    handle_remove_wallet
+    handle_remove_wallet,
+    handle_get_wallet_address,
+    # Prompt functions
+    balance_query_prompt,
+    transaction_send_prompt,
+    wallet_management_prompt,
+    network_info_prompt,
+    security_prompt
 )
 
 # 导出配置对象
@@ -40,5 +47,12 @@ __all__ = [
     "handle_list_wallets",
     "handle_switch_wallet",
     "handle_remove_wallet",
+    "handle_get_wallet_address",
+    # Prompt functions
+    "balance_query_prompt",
+    "transaction_send_prompt", 
+    "wallet_management_prompt",
+    "network_info_prompt",
+    "security_prompt",
     "config"
 ]

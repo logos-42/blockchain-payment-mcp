@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: blockchain-payment-mcp
-Version: 0.1.11
+Version: 0.1.10
 Summary: 区块链货币支付MCP服务器
 Author-email: liuyuanjie <ai@example.com>
 Requires-Python: >=3.8

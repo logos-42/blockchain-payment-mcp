@@ -1,5 +1,7 @@
+MANIFEST.in
 README.md
 pyproject.toml
+requirements.txt
 blockchain_payment_mcp/__init__.py
 blockchain_payment_mcp/blockchain.py
 blockchain_payment_mcp/config.py
