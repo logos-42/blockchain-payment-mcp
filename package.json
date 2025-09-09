@@ -1,6 +1,6 @@
 {
   "name": "blockchain-payment-mcp",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "区块链货币支付MCP服务器 - TypeScript版本",
   "main": "dist/server.js",
   "type": "module",
@@ -42,7 +42,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",
-    "blockchain-payment-mcp": "^0.1.10",
+    "blockchain-payment-mcp": "^0.1.11",
     "dotenv": "^16.3.1",
     "ethers": "^6.8.0",
     "zod": "^3.22.4"
