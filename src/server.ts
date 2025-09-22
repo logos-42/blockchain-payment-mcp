@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * 区块链支付MCP服务器 - TypeScript版本
  *

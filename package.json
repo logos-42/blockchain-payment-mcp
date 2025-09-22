@@ -1,6 +1,6 @@
 {
   "name": "blockchain-payment-mcp",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "区块链货币支付MCP服务器 - TypeScript版本",
   "main": "dist/server.js",
   "type": "module",
@@ -10,7 +10,7 @@
     "env.example"
   ],
   "bin": {
-    "blockchain-payment-mcp-ts": "dist/server.js"
+    "blockchain-payment-mcp": "dist/server.js"
   },
   "repository": {
     "type": "git",
