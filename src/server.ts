@@ -15,11 +15,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { config } from './config.js';
 import { BlockchainInterface } from './blockchain.js';
-import { WalletSigner, WalletManager } from './wallet.js';
+import { WalletSigner, WalletManager, WalletType } from './wallet.js';
 
 // 配置日志 - 使用stderr避免干扰stdio通信
 const isDebug = config.debug;
@@ -86,6 +88,32 @@ function getWallet(privateKey?: string): WalletSigner {
   // 如果都没有，返回一个没有私钥的钱包实例
   return new WalletSigner();
 }
+
+// MCP Prompts - 帮助智能体理解架构
+const prompts = [
+  {
+    name: 'wallet_architecture_guide',
+    description: '智能体钱包架构指南 - 帮助智能体理解钱包类型和使用场景',
+    arguments: [
+      {
+        name: 'scenario',
+        description: '使用场景：automation(自动化操作) 或 user_interaction(用户交互)',
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'wallet_selection_guide',
+    description: '钱包选择指南 - 帮助智能体选择合适的钱包类型',
+    arguments: [
+      {
+        name: 'operation_type',
+        description: '操作类型：transfer(转账) 或 query(查询)',
+        required: false,
+      },
+    ],
+  },
+];
 
 // 工具定义
 const tools: Tool[] = [
@@ -211,6 +239,26 @@ const tools: Tool[] = [
           type: 'string',
           description: '钱包标签(可选)，用于标识钱包',
         },
+        wallet_type: {
+          type: 'string',
+          enum: ['agent', 'user'],
+          description: '钱包类型：agent(智能体钱包，用于自动化操作) 或 user(用户钱包，需要手动确认)',
+          default: 'agent',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'create_agent_wallet',
+    description: '创建智能体专用钱包（自动生成私钥，用于自动化操作）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        label: {
+          type: 'string',
+          description: '钱包标签(可选)，用于标识钱包',
+        },
       },
       required: [],
     },
@@ -274,11 +322,88 @@ const tools: Tool[] = [
   },
   {
     name: 'list_wallets',
-    description: '列出所有已添加的钱包',
+    description: '列出所有已添加的钱包（包括智能体钱包和用户钱包）',
     inputSchema: {
       type: 'object',
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: 'list_agent_wallets',
+    description: '列出所有智能体钱包（用于自动化操作）',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'list_user_wallets',
+    description: '列出所有用户钱包（需要手动确认）',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_agent_wallet_balance',
+    description: '查询智能体钱包余额（用于自动化操作）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        wallet_label: {
+          type: 'string',
+          description: '智能体钱包标签(可选)，如未提供则使用当前智能体钱包',
+        },
+        token_symbol: {
+          type: 'string',
+          description: '指定代币符号(可选)，如USDC、DAI等',
+          enum: config.getSupportedTokens().concat(['ETH']),
+        },
+        network: {
+          type: 'string',
+          description: '网络名称(可选)',
+          enum: config.getSupportedNetworks(),
+          default: config.defaultNetwork,
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'send_from_agent_wallet',
+    description: '使用智能体钱包发送交易（自动化操作，无需用户确认）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to_address: {
+          type: 'string',
+          description: '接收方地址',
+        },
+        amount: {
+          type: 'string',
+          description: '转账金额（以代币单位为准）',
+        },
+        token_symbol: {
+          type: 'string',
+          description: '代币符号，默认为ETH',
+          enum: config.getSupportedTokens().concat(['ETH']),
+          default: 'ETH',
+        },
+        network: {
+          type: 'string',
+          description: '网络名称(可选)',
+          enum: config.getSupportedNetworks(),
+          default: config.defaultNetwork,
+        },
+        from_wallet_label: {
+          type: 'string',
+          description: '智能体钱包标签(可选)，如未提供则使用当前智能体钱包',
+        },
+      },
+      required: ['to_address', 'amount'],
     },
   },
   {
@@ -405,17 +530,20 @@ async function handleEstimateGasFees(args: Record<string, any>): Promise<Record<
 
 async function handleCreateWallet(args: Record<string, any>): Promise<Record<string, any>> {
   const label = args['label'];
+  const walletType = args['wallet_type'] || 'agent';
   const wallet = new WalletSigner();
   const result = wallet.createAccount();
 
   // 如果提供了标签，添加到钱包管理器
   if (label) {
     const privateKey = result.privateKey;
-    if (walletManager.addWallet(label, privateKey)) {
+    const type = walletType === 'user' ? WalletType.USER : WalletType.AGENT;
+    if (walletManager.addWallet(label, privateKey, type)) {
       return {
         ...result,
         label,
-        message: `钱包已创建并添加到钱包管理器，标签: ${label}`,
+        wallet_type: walletType,
+        message: `${walletType === 'agent' ? '智能体' : '用户'}钱包已创建并添加到钱包管理器，标签: ${label}`,
       };
     } else {
       return {
@@ -530,6 +658,151 @@ async function handleListWallets(_args: Record<string, any>): Promise<Record<str
     wallets,
     count: wallets.length,
     current_wallet: walletManager.getCurrentWallet()?.address || null,
+    message: '获取所有钱包列表成功（包括智能体钱包和用户钱包）',
+  };
+}
+
+async function handleCreateAgentWallet(args: Record<string, any>): Promise<Record<string, any>> {
+  const label = args['label'] || `agent_wallet_${Date.now()}`;
+  const wallet = new WalletSigner();
+  const result = wallet.createAccount();
+
+  // 添加到钱包管理器，明确标识为智能体钱包
+  const privateKey = result.privateKey;
+  if (walletManager.addWallet(label, privateKey, WalletType.AGENT)) {
+    return {
+      ...result,
+      label,
+      wallet_type: 'agent',
+      message: `智能体钱包已创建，标签: ${label}。此钱包用于自动化操作，无需用户确认。`,
+    };
+  } else {
+    return {
+      ...result,
+      warning: `智能体钱包创建成功，但添加到钱包管理器失败（标签: ${label}）`,
+    };
+  }
+}
+
+async function handleListAgentWallets(_args: Record<string, any>): Promise<Record<string, any>> {
+  const agentWallets = walletManager.listAgentWallets();
+
+  return {
+    agent_wallets: agentWallets,
+    count: agentWallets.length,
+    message: '获取智能体钱包列表成功。这些钱包用于自动化操作，无需用户确认。',
+  };
+}
+
+async function handleListUserWallets(_args: Record<string, any>): Promise<Record<string, any>> {
+  const userWallets = walletManager.listUserWallets();
+
+  return {
+    user_wallets: userWallets,
+    count: userWallets.length,
+    message: '获取用户钱包列表成功。这些钱包需要手动确认操作。',
+  };
+}
+
+async function handleGetAgentWalletBalance(args: Record<string, any>): Promise<Record<string, any>> {
+  const walletLabel = args['wallet_label'];
+  const tokenSymbol = args['token_symbol'];
+  const network = args['network'] || config.defaultNetwork;
+
+  // 获取智能体钱包
+  let wallet: WalletSigner | null = null;
+  if (walletLabel) {
+    wallet = walletManager.getWallet(walletLabel);
+    const walletInfo = walletManager.getWalletInfo(walletLabel);
+    if (walletInfo && walletInfo.type !== WalletType.AGENT) {
+      return {
+        error: '指定的钱包不是智能体钱包',
+        message: '只能查询智能体钱包的余额',
+      };
+    }
+  } else {
+    // 获取当前智能体钱包
+    const agentWallets = walletManager.listAgentWallets();
+    if (agentWallets.length > 0) {
+      const currentAgentWallet = agentWallets.find(w => w.isCurrent);
+      if (currentAgentWallet) {
+        wallet = walletManager.getWallet(currentAgentWallet.label);
+      } else {
+        wallet = walletManager.getWallet(agentWallets[0]?.label || '');
+      }
+    }
+  }
+
+  if (!wallet) {
+    return {
+      error: '未找到智能体钱包',
+      message: '请先创建智能体钱包或指定有效的智能体钱包标签',
+    };
+  }
+
+  const bc = getBlockchain(network);
+  const balance = await bc.getBalance(wallet.address || '', tokenSymbol);
+
+  return {
+    address: wallet.address || '',
+    balance: balance,
+    token_symbol: tokenSymbol || 'ETH',
+    network: network,
+    wallet_type: 'agent',
+    message: '查询智能体钱包余额成功',
+  };
+}
+
+async function handleSendFromAgentWallet(args: Record<string, any>): Promise<Record<string, any>> {
+  const toAddress = args['to_address'];
+  const amount = args['amount'];
+  const tokenSymbol = args['token_symbol'] || 'ETH';
+  const network = args['network'] || config.defaultNetwork;
+  const fromWalletLabel = args['from_wallet_label'];
+
+  // 获取智能体钱包
+  let wallet: WalletSigner | null = null;
+  if (fromWalletLabel) {
+    wallet = walletManager.getWallet(fromWalletLabel);
+    const walletInfo = walletManager.getWalletInfo(fromWalletLabel);
+    if (walletInfo && walletInfo.type !== WalletType.AGENT) {
+      return {
+        error: '指定的钱包不是智能体钱包',
+        message: '只能使用智能体钱包发送交易',
+      };
+    }
+  } else {
+    // 获取当前智能体钱包
+    const agentWallets = walletManager.listAgentWallets();
+    if (agentWallets.length > 0) {
+      const currentAgentWallet = agentWallets.find(w => w.isCurrent);
+      if (currentAgentWallet) {
+        wallet = walletManager.getWallet(currentAgentWallet.label);
+      } else {
+        wallet = walletManager.getWallet(agentWallets[0]?.label || '');
+      }
+    }
+  }
+
+  if (!wallet) {
+    return {
+      error: '未找到智能体钱包',
+      message: '请先创建智能体钱包或指定有效的智能体钱包标签',
+    };
+  }
+
+  const bc = getBlockchain(network);
+  const result = await bc.sendTransaction(toAddress, amount, tokenSymbol, wallet);
+
+  return {
+    transaction_hash: result['transactionHash'],
+    from_address: wallet.address || '',
+    to_address: toAddress,
+    amount: amount,
+    token_symbol: tokenSymbol,
+    network: network,
+    wallet_type: 'agent',
+    message: '智能体钱包交易发送成功（自动化操作，无需用户确认）',
   };
 }
 
@@ -601,6 +874,162 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
 });
 
+// Prompt处理函数
+async function handleWalletArchitectureGuide(args: Record<string, any>): Promise<Record<string, any>> {
+  const scenario = args['scenario'] || 'automation';
+  
+  const guide = {
+    architecture_overview: {
+      title: "智能体钱包架构说明",
+      description: "本MCP服务器支持两种钱包类型，用于不同的使用场景",
+      wallet_types: {
+        agent: {
+          name: "智能体钱包",
+          purpose: "用于自动化操作，无需用户确认",
+          features: [
+            "自动生成私钥",
+            "支持自动化交易",
+            "无需用户交互",
+            "适合批量操作"
+          ],
+          tools: [
+            "create_agent_wallet - 创建智能体钱包",
+            "get_agent_wallet_balance - 查询智能体钱包余额",
+            "send_from_agent_wallet - 使用智能体钱包发送交易",
+            "list_agent_wallets - 列出所有智能体钱包"
+          ]
+        },
+        user: {
+          name: "用户钱包",
+          purpose: "用于用户交互，需要手动确认",
+          features: [
+            "用户提供私钥",
+            "需要用户确认交易",
+            "适合用户主动操作",
+            "支持钱包连接器"
+          ],
+          tools: [
+            "set_user_wallet - 设置用户钱包私钥",
+            "list_user_wallets - 列出所有用户钱包",
+            "send_transaction - 发送交易（需要用户确认）"
+          ]
+        }
+      }
+    },
+    usage_scenarios: {
+      automation: {
+        title: "自动化场景",
+        description: "使用智能体钱包进行自动化操作",
+        workflow: [
+          "1. 创建智能体钱包 (create_agent_wallet)",
+          "2. 查询余额 (get_agent_wallet_balance)",
+          "3. 执行自动化交易 (send_from_agent_wallet)",
+          "4. 监控交易状态 (get_transaction_status)"
+        ],
+        benefits: [
+          "无需用户干预",
+          "支持批量操作",
+          "适合定时任务",
+          "提高操作效率"
+        ]
+      },
+      user_interaction: {
+        title: "用户交互场景",
+        description: "使用用户钱包进行需要确认的操作",
+        workflow: [
+          "1. 设置用户钱包 (set_user_wallet)",
+          "2. 查询余额 (get_balance)",
+          "3. 发送交易 (send_transaction) - 需要用户确认",
+          "4. 监控交易状态 (get_transaction_status)"
+        ],
+        benefits: [
+          "用户完全控制",
+          "安全性更高",
+          "适合大额交易",
+          "符合用户习惯"
+        ]
+      }
+    },
+    best_practices: [
+      "智能体钱包用于自动化、批量、小额操作",
+      "用户钱包用于需要用户确认的重要操作",
+      "两种钱包类型可以并存，根据场景选择",
+      "智能体钱包的私钥由系统管理，用户钱包的私钥由用户提供"
+    ]
+  };
+
+  return {
+    success: true,
+    scenario: scenario,
+    guide: guide,
+    message: `智能体钱包架构指南 - ${scenario === 'automation' ? '自动化场景' : '用户交互场景'}`
+  };
+}
+
+async function handleWalletSelectionGuide(args: Record<string, any>): Promise<Record<string, any>> {
+  const operationType = args['operation_type'] || 'transfer';
+  
+  const selectionGuide = {
+    operation_type: operationType,
+    recommendations: {
+      transfer: {
+        agent_wallet: {
+          when_to_use: [
+            "自动化转账任务",
+            "批量小额转账",
+            "定时转账",
+            "无需用户确认的转账"
+          ],
+          tools: ["send_from_agent_wallet"],
+          example: "定时向多个地址分发代币"
+        },
+        user_wallet: {
+          when_to_use: [
+            "用户主动转账",
+            "大额转账",
+            "需要用户确认的转账",
+            "一次性转账"
+          ],
+          tools: ["send_transaction"],
+          example: "用户向朋友转账"
+        }
+      },
+      query: {
+        agent_wallet: {
+          when_to_use: [
+            "监控智能体钱包余额",
+            "自动化余额检查",
+            "批量余额查询"
+          ],
+          tools: ["get_agent_wallet_balance"],
+          example: "检查智能体钱包是否有足够余额执行任务"
+        },
+        user_wallet: {
+          when_to_use: [
+            "用户查看自己钱包余额",
+            "查询特定地址余额",
+            "一次性余额查询"
+          ],
+          tools: ["get_balance"],
+          example: "用户查看自己的钱包余额"
+        }
+      }
+    },
+    decision_tree: {
+      question: "这个操作需要用户确认吗？",
+      yes: "使用用户钱包 (user wallet)",
+      no: "使用智能体钱包 (agent wallet)"
+    }
+  };
+
+  return {
+    success: true,
+    operation_type: operationType,
+    guide: selectionGuide,
+    message: `钱包选择指南 - ${operationType === 'transfer' ? '转账操作' : '查询操作'}`
+  };
+}
+
 // 注册工具调用处理器
 server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
   const { name, arguments: args } = request.params;
@@ -623,6 +1052,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         break;
       case 'create_wallet':
         result = await handleCreateWallet(args);
+        break;
+      case 'create_agent_wallet':
+        result = await handleCreateAgentWallet(args);
+        break;
+      case 'list_agent_wallets':
+        result = await handleListAgentWallets(args);
+        break;
+      case 'list_user_wallets':
+        result = await handleListUserWallets(args);
+        break;
+      case 'get_agent_wallet_balance':
+        result = await handleGetAgentWalletBalance(args);
+        break;
+      case 'send_from_agent_wallet':
+        result = await handleSendFromAgentWallet(args);
         break;
       case 'get_network_info':
         result = await handleGetNetworkInfo(args);
@@ -664,32 +1108,81 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
   }
 });
 
+// 注册Prompts
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  return { prompts };
+});
+
+// 处理Prompt请求
+server.setRequestHandler(GetPromptRequestSchema, async (request: any) => {
+  const { name, arguments: args } = request.params;
+  
+  try {
+    let result: Record<string, any>;
+    
+    switch (name) {
+      case 'wallet_architecture_guide':
+        result = await handleWalletArchitectureGuide(args);
+        break;
+      case 'wallet_selection_guide':
+        result = await handleWalletSelectionGuide(args);
+        break;
+      default:
+        throw new Error(`未知的prompt: ${name}`);
+    }
+    
+    return {
+      description: result['message'],
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        }
+      ]
+    };
+  } catch (error) {
+    throw new Error(`处理prompt失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+});
+
 // 主函数
 async function main(): Promise<void> {
   // 设置更简洁的日志格式，避免干扰stdio通信
   if (config.debug) {
-    log('info', '启动区块链支付MCP服务器');
-    log('info', `默认网络: ${config.defaultNetwork}`);
+    log('info', '🚀 启动区块链支付MCP服务器');
+    log('info', `📋 支持的工具数量: ${tools.length}`);
+    log('info', `📋 支持的Prompts数量: ${prompts.length}`);
+    log('info', `🌐 默认网络: ${config.defaultNetwork}`);
+    
+    // 架构说明
+    log('info', '💡 智能体钱包架构说明:');
+    log('info', '  🤖 智能体钱包: 用于自动化操作，无需用户确认');
+    log('info', '  👤 用户钱包: 用于用户交互，需要手动确认');
+    log('info', '  🔧 钱包连接: 由前端智能体处理，MCP专注于区块链操作');
 
     // 验证配置
     if (!config.privateKey) {
-      log('warn', '未设置PRIVATE_KEY环境变量，发送交易功能将需要用户手动提供私钥');
+      log('warn', '⚠️ 未设置PRIVATE_KEY环境变量，发送交易功能将需要用户手动提供私钥');
     } else {
-      log('info', '已配置PRIVATE_KEY环境变量');
+      log('info', '✅ 已配置PRIVATE_KEY环境变量');
     }
 
     // 测试网络连接
     try {
       const bc = getBlockchain();
-      log('info', `网络连接测试成功: ${bc.getNetworkConfig().name}`);
+      log('info', `✅ 网络连接测试成功: ${bc.getNetworkConfig().name}`);
     } catch (error) {
-      log('error', `网络连接测试失败: ${error}`);
+      log('error', `❌ 网络连接测试失败: ${error}`);
     }
   }
 
   // 启动服务器
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  log('info', '✅ 服务器启动成功，等待连接...');
 }
 
 // 启动服务器

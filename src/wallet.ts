@@ -3,10 +3,19 @@
  */
 import { ethers } from 'ethers';
 
+// 钱包类型枚举
+export enum WalletType {
+  AGENT = 'agent',
+  USER = 'user'
+}
+
 // 钱包接口
 export interface WalletInfo {
   address: string;
   privateKey: string;
+  type: WalletType;
+  label: string;
+  createdAt: string;
   warning?: string;
 }
 
@@ -74,6 +83,9 @@ export class WalletSigner {
     return {
       address: newWallet.address,
       privateKey: newWallet.privateKey,
+      type: WalletType.AGENT,
+      label: `wallet_${Date.now()}`,
+      createdAt: new Date().toISOString(),
       warning: '请安全保存私钥，丢失将无法找回资产！',
     };
   }
@@ -163,11 +175,24 @@ async function sendTransaction(to, value, data = '0x') {
 // 钱包管理器类
 export class WalletManager {
   private wallets: Map<string, WalletSigner> = new Map();
+  private walletInfo: Map<string, WalletInfo> = new Map();
   private currentWalletLabel: string | null = null;
 
-  public addWallet(label: string, privateKey: string): boolean {
+  public addWallet(label: string, privateKey: string, type: WalletType = WalletType.AGENT): boolean {
     if (WalletSigner.validatePrivateKey(privateKey)) {
-      this.wallets.set(label, new WalletSigner(privateKey));
+      const wallet = new WalletSigner(privateKey);
+      this.wallets.set(label, wallet);
+      
+      // 保存钱包信息
+      this.walletInfo.set(label, {
+        address: wallet.address || '',
+        privateKey: privateKey,
+        type: type,
+        label: label,
+        createdAt: new Date().toISOString(),
+        warning: type === WalletType.AGENT ? '智能体钱包，用于自动化操作' : '用户钱包，需要手动确认'
+      });
+      
       // 如果这是第一个钱包，设置为当前钱包
       if (this.currentWalletLabel === null) {
         this.currentWalletLabel = label;
@@ -199,6 +224,7 @@ export class WalletManager {
   public removeWallet(label: string): boolean {
     if (this.wallets.has(label)) {
       this.wallets.delete(label);
+      this.walletInfo.delete(label);
       // 如果删除的是当前钱包，重置当前钱包
       if (this.currentWalletLabel === label) {
         this.currentWalletLabel = this.wallets.size > 0 ? Array.from(this.wallets.keys())[0] ?? null : null;
@@ -208,15 +234,45 @@ export class WalletManager {
     return false;
   }
 
-  public listWallets(): Array<{ label: string; address: string; isCurrent: boolean }> {
-    const result: Array<{ label: string; address: string; isCurrent: boolean }> = [];
+  public getWalletInfo(label: string): WalletInfo | null {
+    return this.walletInfo.get(label) || null;
+  }
+
+  public listWallets(): Array<{ label: string; address: string; type: WalletType; isCurrent: boolean; createdAt: string; warning?: string }> {
+    const result: Array<{ label: string; address: string; type: WalletType; isCurrent: boolean; createdAt: string; warning?: string }> = [];
     for (const [label, wallet] of this.wallets) {
+      const info = this.walletInfo.get(label);
       result.push({
         label,
         address: wallet.address || '',
+        type: info?.type || WalletType.AGENT,
         isCurrent: label === this.currentWalletLabel,
+        createdAt: info?.createdAt || new Date().toISOString(),
+        ...(info?.warning && { warning: info.warning })
       });
     }
     return result;
+  }
+
+  public listAgentWallets(): Array<{ label: string; address: string; isCurrent: boolean; createdAt: string }> {
+    return this.listWallets()
+      .filter(wallet => wallet.type === WalletType.AGENT)
+      .map(wallet => ({
+        label: wallet.label,
+        address: wallet.address,
+        isCurrent: wallet.isCurrent,
+        createdAt: wallet.createdAt
+      }));
+  }
+
+  public listUserWallets(): Array<{ label: string; address: string; isCurrent: boolean; createdAt: string }> {
+    return this.listWallets()
+      .filter(wallet => wallet.type === WalletType.USER)
+      .map(wallet => ({
+        label: wallet.label,
+        address: wallet.address,
+        isCurrent: wallet.isCurrent,
+        createdAt: wallet.createdAt
+      }));
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "blockchain-payment-mcp",
-  "version": "0.1.12",
-  "description": "区块链货币支付MCP服务器 - TypeScript版本",
+  "version": "0.1.13",
+  "description": "区块链货币支付MCP服务器 - TypeScript版本，支持智能体钱包和用户钱包管理",
   "main": "dist/server.js",
   "type": "module",
   "files": [
